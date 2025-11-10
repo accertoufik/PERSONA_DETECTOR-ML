@@ -1,0 +1,50 @@
+# -----------------------------
+# Python / Flask Project Ignore
+# -----------------------------
+
+# Virtual environments
+venv/
+env/
+
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment files
+.env
+.env.*
+
+# Logs
+*.log
+*.out
+*.err
+
+# IDE / Editor settings
+.vscode/
+.idea/
+*.swp
+
+# macOS / Linux system files
+.DS_Store
+Thumbs.db
+
+# Jupyter / IPython
+.ipynb_checkpoints/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Backup / temporary files
+*.bak
+*.tmp
+*.old
+
+# Data or model artifacts (if not needed)
+*.pkl
+*.joblib
+*.csv
+*.json
