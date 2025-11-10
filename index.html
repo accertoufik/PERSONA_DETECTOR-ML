@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Persona CSV Processor</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Use Inter font */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom styles for table */
+        table {
+            @apply min-w-full divide-y divide-gray-200;
+        }
+        th {
+            @apply px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50;
+        }
+        td {
+            @apply px-3 py-4 whitespace-nowrap text-sm text-gray-700;
+        }
+        tr:nth-child(even) {
+            @apply bg-gray-50;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-7xl w-full space-y-8">
+        <!-- Main Card -->
+        <div class="bg-white p-8 rounded-2xl shadow-lg">
+            <h2 class="text-center text-3xl font-extrabold text-gray-900 mb-6">
+                Student Lifestyle Persona Processor
+            </h2>
+            <p class="text-center text-gray-600 mb-8">
+                Upload your `Studentdata.csv` file here. The app will clean the data, run K-Means clustering, and show you the results with the predicted persona for each student.
+            </p>
+
+            <!-- Upload Form -->
+            <form id="upload-form" class="space-y-6 max-w-lg mx-auto">
+                <div>
+                    <label for="csv-file" class="block text-sm font-medium text-gray-700">CSV File</label>
+                    <input type="file" id="csv-file" name="file" accept=".csv" required class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                </div>
+                
+                <!-- Submit Button -->
+                <div>
+                    <button type="submit" id="submit-button" class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Process File and Predict Personas
+                    </button>
+                </div>
+            </form>
+
+            <!-- Loading Spinner -->
+            <div id="loading-spinner" class="mt-8 text-center" style="display: none;">
+                <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="mt-2 text-gray-600">Processing file... this may take a moment.</p>
+            </div>
+
+            <!-- Result Display -->
+            <div id="result-container" class="mt-8" style="display: none;">
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">Clustering Results:</h3>
+                <div class="overflow-x-auto shadow rounded-lg">
+                    <table id="result-table" class="min-w-full divide-y divide-gray-200">
+                        <thead id="result-head" class="bg-gray-50">
+                            <!-- Headers will be added by JS -->
+                        </thead>
+                        <tbody id="result-body" class="bg-white divide-y divide-gray-200">
+                            <!-- Rows will be added by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Error Display -->
+            <div id="error-container" class="mt-8 text-center" style="display: none;">
+                <div id="error" class="mt-2 p-4 rounded-lg bg-red-100 text-red-700">
+                    <!-- Content will be added by JS -->
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('upload-form').addEventListener('submit', async function(event) {
+            event.preventDefault(); // Prevent default form submission
+
+            const form = event.target;
+            const submitButton = document.getElementById('submit-button');
+            const loadingSpinner = document.getElementById('loading-spinner');
+            const resultContainer = document.getElementById('result-container');
+            const resultHead = document.getElementById('result-head');
+            const resultBody = document.getElementById('result-body');
+            const errorContainer = document.getElementById('error-container');
+            const errorDiv = document.getElementById('error');
+
+            // --- Show loading state ---
+            submitButton.disabled = true;
+            submitButton.innerHTML = 'Processing...';
+            loadingSpinner.style.display = 'block';
+            resultContainer.style.display = 'none';
+            errorContainer.style.display = 'none';
+
+            // --- 1. Collect form data ---
+            const fileInput = document.getElementById('csv-file');
+            if (fileInput.files.length === 0) {
+                showError('Please select a file to upload.');
+                resetButton();
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            // --- 2. Define API URL ---
+            const apiUrl = 'http://127.0.0.1:5000/upload_and_process';
+
+            try {
+                // --- 3. Send data to backend ---
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    body: formData // No Content-Type header needed, browser sets it
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || `HTTP error! Status: ${response.status}`);
+                }
+
+                // --- 4. Process successful response ---
+                // The backend returns a JSON object with a 'data' key,
+                // which contains a JSON *string* of the dataframe.
+                const data = JSON.parse(result.data);
+                
+                if (data.length === 0) {
+                    showError("Processing was successful, but the file resulted in no data.");
+                    resetButton();
+                    return;
+                }
+
+                // --- 5. Build Results Table ---
+                buildTable(data);
+                resultContainer.style.display = 'block';
+
+            } catch (error) {
+                // --- 6. Handle errors ---
+                console.error('Prediction error:', error);
+                showError(`Processing failed: ${error.message}`);
+            } finally {
+                // --- 7. Reset button & loading ---
+                resetButton();
+                loadingSpinner.style.display = 'none';
+            }
+        });
+
+        function buildTable(data) {
+            const resultHead = document.getElementById('result-head');
+            const resultBody = document.getElementById('result-body');
+            
+            // Clear previous results
+            resultHead.innerHTML = '';
+            resultBody.innerHTML = '';
+
+            // Get headers from the first object
+            const headers = Object.keys(data[0]);
+            const headerRow = document.createElement('tr');
+            
+            // Make 'Persona' and 'Cluster' the first columns
+            const prioritizedHeaders = ['Persona', 'Cluster'].filter(h => headers.includes(h));
+            const otherHeaders = headers.filter(h => !prioritizedHeaders.includes(h));
+            const orderedHeaders = [...prioritizedHeaders, ...otherHeaders];
+
+            orderedHeaders.forEach(key => {
+                const th = document.createElement('th');
+                th.textContent = key.replace(/ /g, ' ').trim(); // Clean up column names
+                headerRow.appendChild(th);
+            });
+            resultHead.appendChild(headerRow);
+
+            // Populate table body
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                orderedHeaders.forEach(key => {
+                    const td = document.createElement('td');
+                    let value = row[key];
+                    // Format numbers to 2 decimal places if they are floats
+                    if (typeof value === 'number' && !Number.isInteger(value)) {
+                        value = value.toFixed(2);
+                    }
+                    td.textContent = value;
+                    
+                    // Highlight the persona
+                    if (key === 'Persona') {
+                        td.className += ' font-bold';
+                        if (row[key] === 'Moderate Engager') {
+                            td.className += ' text-blue-800';
+                        } else {
+                            td.className += ' text-purple-800';
+                        }
+                    }
+
+                    tr.appendChild(td);
+                });
+                resultBody.appendChild(tr);
+            });
+        }
+
+        function showError(message) {
+            const errorContainer = document.getElementById('error-container');
+            const errorDiv = document.getElementById('error');
+            errorContainer.style.display = 'block';
+            errorDiv.textContent = message;
+        }
+
+        function resetButton() {
+            const submitButton = document.getElementById('submit-button');
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Process File and Predict Personas';
+        }
+
+    </script>
+</body>
+</html>
